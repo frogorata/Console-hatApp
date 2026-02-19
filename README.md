@@ -36,7 +36,7 @@ From the repository root:
 
 ```bash
 dotnet build
-dotnet run
+dotnet run --project ConsoleChatApp
 ```
 
 ## Usage
