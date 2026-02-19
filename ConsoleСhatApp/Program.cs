@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 
 class TerminalChatApp
 {
@@ -125,7 +120,7 @@ class TerminalChatApp
             if (HandleCommand(msg, writer: null))
                 continue;
 
-            BroadcastMessage($"[{Time()}] [{nickname}]: {msg}", sender: null);
+            BroadcastMessage($"[{Time()}] [{nickname}]: {msg}", sender: null, localColor: ConsoleColor.Green);
         }
     }
 
@@ -196,7 +191,7 @@ class TerminalChatApp
         }
     }
 
-    static void BroadcastMessage(string message, TcpClient sender)
+    static void BroadcastMessage(string message, TcpClient sender, ConsoleColor? localColor = null)
     {
         List<TcpClient> snapshot;
         lock (clientsLock)
@@ -220,9 +215,7 @@ class TerminalChatApp
         }
 
         if (isServer)
-        {
-            WriteLineSafe(message, ConsoleColor.Cyan, reprintPrompt: true);
-        }
+            WriteLineSafe(message, localColor ?? ConsoleColor.Cyan, reprintPrompt: true);
     }
 
     static void StartClient()
