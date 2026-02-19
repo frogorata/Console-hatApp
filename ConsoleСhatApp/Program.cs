@@ -19,17 +19,17 @@ class TerminalChatApp
         {
             Console.OutputEncoding = Encoding.UTF8;
             Console.InputEncoding = Encoding.UTF8;
-            Console.Title = "🎮 Терминальный Чат v2.4 (Многопользовательский)";
+            Console.Title = "Terminal Chat v2.4 (Multiplayer)";
 
             while (true)
             {
-                Console.WriteLine("=== Добро пожаловать в Терминальный Чат v2.4 ===\n");
-                Console.WriteLine("Выберите режим:");
-                Console.WriteLine("1. Создать сервер (многопользовательский)");
-                Console.WriteLine("2. Подключиться к серверу");
-                Console.WriteLine($"3. {(debugMode ? "Выключить" : "Включить")} debug-режим");
-                Console.WriteLine("4. Выход");
-                Console.Write("Введите номер: ");
+                Console.WriteLine("=== Welcome to Terminal Chat v2.4 ===\n");
+                Console.WriteLine("Select mode:");
+                Console.WriteLine("1. Create server (multiplayer)");
+                Console.WriteLine("2. Connect to server");
+                Console.WriteLine($"3. {(debugMode ? "Disable" : "Enable")} debug mode");
+                Console.WriteLine("4. Exit");
+                Console.Write("Enter number: ");
                 string choice = Console.ReadLine();
                 switch (choice)
                 {
@@ -37,19 +37,19 @@ class TerminalChatApp
                     case "2": StartClient(); return;
                     case "3": debugMode = !debugMode; Console.Clear(); break;
                     case "4": return;
-                    default: Console.WriteLine("Неверный выбор. Повторите.\n"); break;
+                    default: Console.WriteLine("Invalid option. Try again.\n"); break;
                 }
             }
         }
         catch (Exception ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("\nПроизошла ошибка: " + ex.Message);
+            Console.WriteLine("\nAn error occurred: " + ex.Message);
             Console.ResetColor();
         }
         finally
         {
-            Console.WriteLine("\nНажмите Enter для выхода...");
+            Console.WriteLine("\nPress Enter to exit...");
             Console.ReadLine();
         }
     }
@@ -57,10 +57,10 @@ class TerminalChatApp
     static void StartServer()
     {
         Console.Clear();
-        Console.Write("Ваш ник (сервер): ");
+        Console.Write("Your nickname (server): ");
         nickname = Console.ReadLine();
 
-        Console.Write("Порт (например, 8888): ");
+        Console.Write("Port (e.g., 8888): ");
         int port = int.TryParse(Console.ReadLine(), out var p) ? p : 8888;
 
         TcpListener server = new TcpListener(IPAddress.Any, port);
@@ -68,7 +68,7 @@ class TerminalChatApp
 
         string ipAddress = GetLocalIPAddress();
         Console.Clear();
-        Console.WriteLine($"\nСервер создан!\nИмя: {nickname}\nIP: {ipAddress}\nПорт: {port}\n");
+        Console.WriteLine($"\nServer created!\nName: {nickname}\nIP: {ipAddress}\nПорт: {port}\n");
 
         new Thread(() =>
         {
@@ -76,9 +76,9 @@ class TerminalChatApp
             {
                 TcpClient client = server.AcceptTcpClient();
                 clients.Add(client);
-                PrintDebug("Новый клиент подключился.");
-                Console.WriteLine($"> Подключено: {clients.Count} человек(а)");
-                BroadcastMessage($"[{Time()}] Сервер: Пользователь подключился.", client);
+                PrintDebug("New client connected.");
+                Console.WriteLine($"> Connected users: {clients.Count}");
+                BroadcastMessage($"[{Time()}] Server: A user has connected.", client);
                 new Thread(() => HandleClient(client)).Start();
             }
         }).Start();
@@ -98,7 +98,7 @@ class TerminalChatApp
         var reader = new StreamReader(stream, Encoding.UTF8);
         var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
 
-        writer.WriteLine($"[{Time()}] Сервер: Добро пожаловать в чат!");
+        writer.WriteLine($"[{Time()}] Server: Welcome to the chat!");
 
         while (true)
         {
@@ -130,13 +130,13 @@ class TerminalChatApp
     static void StartClient()
     {
         Console.Clear();
-        Console.Write("Ваш ник: ");
+        Console.Write("Your nickname: ");
         nickname = Console.ReadLine();
 
-        Console.Write("IP сервера: ");
+        Console.Write("Server IP: ");
         string ip = Console.ReadLine();
 
-        Console.Write("Порт: ");
+        Console.Write("Port: ");
         int port = int.TryParse(Console.ReadLine(), out var p) ? p : 8888;
 
         bool stopLoading = false;
@@ -146,7 +146,7 @@ class TerminalChatApp
             int i = 0;
             while (!stopLoading)
             {
-                Console.Write($"\rПодключение к серверу{dots[i]}   ");
+                Console.Write($"\rConnecting to server{dots[i]}   ");
                 Thread.Sleep(500);
                 i = (i + 1) % dots.Length;
             }
@@ -164,7 +164,7 @@ class TerminalChatApp
             var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
 
             Console.Clear();
-            Console.WriteLine("Подключение успешно! Вы можете общаться.\n");
+            Console.WriteLine("Connected successfully! You can now chat.\n");
 
             new Thread(() =>
             {
@@ -199,7 +199,7 @@ class TerminalChatApp
         {
             stopLoading = true;
             loadingThread.Join();
-            Console.WriteLine("Ошибка подключения: " + ex.Message);
+            Console.WriteLine("Connection error: " + ex.Message);
             Console.ReadLine();
         }
     }
@@ -208,7 +208,7 @@ class TerminalChatApp
     {
         if (input.StartsWith("/exit"))
         {
-            Console.WriteLine("Вы вышли из чата.");
+            Console.WriteLine("You left the chat.");
             Environment.Exit(0);
         }
         else if (input.StartsWith("/clear"))
@@ -219,12 +219,12 @@ class TerminalChatApp
         else if (input.StartsWith("/nick "))
         {
             nickname = input.Substring(6).Trim();
-            Console.WriteLine($"Ник изменён на: {nickname}");
+            Console.WriteLine($"Nickname changed to: {nickname}");
             return true;
         }
         else if (input.StartsWith("/help"))
         {
-            Console.WriteLine("\n/exit — выйти из чата\n/nick <имя> — сменить ник\n/clear — очистить экран\n/help — список команд\n");
+            Console.WriteLine("\n/exit — leave the chat\n/nick <name> — change nickname\n/clear — clear screen\n/help — show commands\n");
             return true;
         }
         return false;
@@ -249,6 +249,6 @@ class TerminalChatApp
             if (ip.AddressFamily == AddressFamily.InterNetwork)
                 return ip.ToString();
         }
-        return "Не найден";
+        return "Not found";
     }
 }
