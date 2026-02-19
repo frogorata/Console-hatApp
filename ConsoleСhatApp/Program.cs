@@ -11,7 +11,13 @@ class TerminalChatApp
 {
     static bool debugMode = false;
     static string nickname = "User";
+
+    static int serverPort;
+    static string serverIP;
+    static bool isServer = false;
+
     static List<TcpClient> clients = new List<TcpClient>();
+    static Dictionary<TcpClient, string> clientNicknames = new Dictionary<TcpClient, string>();
 
     static void Main()
     {
@@ -30,7 +36,9 @@ class TerminalChatApp
                 Console.WriteLine($"3. {(debugMode ? "Disable" : "Enable")} debug mode");
                 Console.WriteLine("4. Exit");
                 Console.Write("Enter number: ");
+
                 string choice = Console.ReadLine();
+
                 switch (choice)
                 {
                     case "1": StartServer(); return;
@@ -47,9 +55,81 @@ class TerminalChatApp
             Console.WriteLine("\nAn error occurred: " + ex.Message);
             Console.ResetColor();
         }
-        finally
+    }
+    static void StartClient()
+    {
+        Console.Clear();
+        Console.Write("Your nickname: ");
+        nickname = Console.ReadLine();
+
+        Console.Write("Server IP: ");
+        string ip = Console.ReadLine();
+
+        Console.Write("Port: ");
+        int port = int.TryParse(Console.ReadLine(), out var p) ? p : 8888;
+
+        try
         {
-            Console.WriteLine("\nPress Enter to exit...");
+            TcpClient client = new TcpClient(ip, port);
+
+            var stream = client.GetStream();
+            var reader = new StreamReader(stream, Encoding.UTF8);
+            var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+
+            Console.Clear();
+            Console.WriteLine("Connected successfully! You can now chat.\n");
+
+            writer.WriteLine($"/nick {nickname}");
+
+            new Thread(() =>
+            {
+                while (true)
+                {
+                    try
+                    {
+                        string message = reader.ReadLine();
+                        if (message == null) break;
+
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        Console.WriteLine("\n" + message);
+                        Console.ResetColor();
+                        Console.Write("> ");
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
+
+                Console.WriteLine("\nDisconnected from server.");
+            }).Start();
+
+            while (true)
+            {
+                Console.Write("> ");
+                string msg = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(msg))
+                    continue;
+
+                if (msg.StartsWith("/nick "))
+                {
+                    nickname = msg.Substring(6).Trim();
+                }
+
+                if (msg.StartsWith("/exit"))
+                {
+                    client.Close();
+                    Console.WriteLine("Disconnected.");
+                    return;
+                }
+
+                writer.WriteLine(msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Connection error: " + ex.Message);
             Console.ReadLine();
         }
     }
@@ -61,14 +141,16 @@ class TerminalChatApp
         nickname = Console.ReadLine();
 
         Console.Write("Port (e.g., 8888): ");
-        int port = int.TryParse(Console.ReadLine(), out var p) ? p : 8888;
+        serverPort = int.TryParse(Console.ReadLine(), out var p) ? p : 8888;
+        isServer = true;
 
-        TcpListener server = new TcpListener(IPAddress.Any, port);
+        TcpListener server = new TcpListener(IPAddress.Any, serverPort);
         server.Start();
 
-        string ipAddress = GetLocalIPAddress();
+        serverIP = GetLocalIPAddress();
+
         Console.Clear();
-        Console.WriteLine($"\nServer created!\nName: {nickname}\nIP: {ipAddress}\nПорт: {port}\n");
+        Console.WriteLine($"\nServer created!\nName: {nickname}\nIP: {serverIP}\nPort: {serverPort}\n");
 
         new Thread(() =>
         {
@@ -76,9 +158,12 @@ class TerminalChatApp
             {
                 TcpClient client = server.AcceptTcpClient();
                 clients.Add(client);
-                PrintDebug("New client connected.");
+                clientNicknames[client] = "Guest";
+
                 Console.WriteLine($"> Connected users: {clients.Count}");
-                BroadcastMessage($"[{Time()}] Server: A user has connected.", client);
+
+                BroadcastMessage($"[{Time()}] Server: A new user connected.", null);
+
                 new Thread(() => HandleClient(client)).Start();
             }
         }).Start();
@@ -88,6 +173,7 @@ class TerminalChatApp
             Console.Write("> ");
             string msg = Console.ReadLine();
             if (HandleCommand(msg)) continue;
+
             BroadcastMessage($"[{Time()}] [{nickname}]: {msg}", null);
         }
     }
@@ -106,15 +192,32 @@ class TerminalChatApp
             {
                 string message = reader.ReadLine();
                 if (message == null) break;
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("\n" + message);
-                Console.ResetColor();
-                BroadcastMessage(message, client);
+
+                if (message.StartsWith("/nick "))
+                {
+                    string oldNick = clientNicknames[client];
+                    string newNick = message.Substring(6).Trim();
+
+                    clientNicknames[client] = newNick;
+
+                    BroadcastMessage($"[{Time()}] Server: {oldNick} changed nickname to {newNick}", null);
+                }
+                else
+                {
+                    string nick = clientNicknames[client];
+                    BroadcastMessage($"[{Time()}] [{nick}]: {message}", client);
+                }
             }
             catch { break; }
         }
+
+        string leftNick = clientNicknames[client];
+
         clients.Remove(client);
+        clientNicknames.Remove(client);
         client.Close();
+
+        BroadcastMessage($"[{Time()}] Server: {leftNick} disconnected.", null);
     }
 
     static void BroadcastMessage(string message, TcpClient sender)
@@ -122,122 +225,98 @@ class TerminalChatApp
         foreach (var client in clients)
         {
             if (client == sender) continue;
-            var writer = new StreamWriter(client.GetStream(), Encoding.UTF8) { AutoFlush = true };
-            writer.WriteLine(message);
+
+            try
+            {
+                var writer = new StreamWriter(client.GetStream(), Encoding.UTF8) { AutoFlush = true };
+                writer.WriteLine(message);
+            }
+            catch { }
         }
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine(message);
+        Console.ResetColor();
     }
 
-    static void StartClient()
+    static bool HandleCommand(string input)
     {
-        Console.Clear();
-        Console.Write("Your nickname: ");
-        nickname = Console.ReadLine();
+        if (!input.StartsWith("/"))
+            return false;
 
-        Console.Write("Server IP: ");
-        string ip = Console.ReadLine();
+        var parts = input.Split(' ', 2);
+        string command = parts[0];
 
-        Console.Write("Port: ");
-        int port = int.TryParse(Console.ReadLine(), out var p) ? p : 8888;
-
-        bool stopLoading = false;
-        Thread loadingThread = new Thread(() =>
+        switch (command)
         {
-            string[] dots = { ".", "..", "..." };
-            int i = 0;
-            while (!stopLoading)
-            {
-                Console.Write($"\rConnecting to server{dots[i]}   ");
-                Thread.Sleep(500);
-                i = (i + 1) % dots.Length;
-            }
-        });
-        loadingThread.Start();
-
-        try
-        {
-            TcpClient client = new TcpClient(ip, port);
-            stopLoading = true;
-            loadingThread.Join();
-
-            var stream = client.GetStream();
-            var reader = new StreamReader(stream, Encoding.UTF8);
-            var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
-
-            Console.Clear();
-            Console.WriteLine("Connected successfully! You can now chat.\n");
-
-            new Thread(() =>
-            {
-                while (true)
+            case "/info":
+                if (!isServer)
                 {
-                    try
-                    {
-                        string message = reader.ReadLine();
-                        if (message == null) break;
-                        Console.ForegroundColor = ConsoleColor.Cyan;
-                        Console.WriteLine("\n" + message);
-                        Console.ResetColor();
-                        Console.Write("> ");
-                    }
-                    catch { break; }
+                    Console.WriteLine("Host only command.");
+                    return true;
                 }
-            }).Start();
 
-            while (true)
-            {
-                Console.Write("> ");
-                string msg = Console.ReadLine();
-                if (HandleCommand(msg, writer)) continue;
-                string fullMsg = $"[{Time()}] [{nickname}]: {msg}";
-                writer.WriteLine(fullMsg);
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("\n" + fullMsg);
-                Console.ResetColor();
-            }
-        }
-        catch (Exception ex)
-        {
-            stopLoading = true;
-            loadingThread.Join();
-            Console.WriteLine("Connection error: " + ex.Message);
-            Console.ReadLine();
-        }
-    }
+                Console.WriteLine($"\nServer Name: {nickname}");
+                Console.WriteLine($"IP: {serverIP}");
+                Console.WriteLine($"Port: {serverPort}");
+                Console.WriteLine($"Connected Users: {clients.Count}\n");
+                return true;
 
-    static bool HandleCommand(string input, StreamWriter writer = null)
-    {
-        if (input.StartsWith("/exit"))
-        {
-            Console.WriteLine("You left the chat.");
-            Environment.Exit(0);
+            case "/users":
+                if (!isServer)
+                {
+                    Console.WriteLine("Host only command.");
+                    return true;
+                }
+
+                Console.WriteLine("\nConnected Users:");
+
+                int i = 1;
+                foreach (var client in clients)
+                {
+                    Console.WriteLine($"{i}. {clientNicknames[client]} ({client.Client.RemoteEndPoint})");
+                    i++;
+                }
+
+                Console.WriteLine();
+                return true;
+
+            case "/kick":
+                if (!isServer)
+                {
+                    Console.WriteLine("Host only command.");
+                    return true;
+                }
+
+                if (parts.Length < 2 || !int.TryParse(parts[1], out int index))
+                {
+                    Console.WriteLine("Usage: /kick <number>");
+                    return true;
+                }
+
+                index--;
+
+                if (index < 0 || index >= clients.Count)
+                {
+                    Console.WriteLine("Invalid number.");
+                    return true;
+                }
+
+                var clientToKick = clients[index];
+                string nick = clientNicknames[clientToKick];
+
+                var kickWriter = new StreamWriter(clientToKick.GetStream(), Encoding.UTF8) { AutoFlush = true };
+                kickWriter.WriteLine($"[{Time()}] Server: You were kicked.");
+
+                clientToKick.Close();
+                clients.RemoveAt(index);
+                clientNicknames.Remove(clientToKick);
+
+                BroadcastMessage($"[{Time()}] Server: {nick} was kicked.", null);
+                return true;
         }
-        else if (input.StartsWith("/clear"))
-        {
-            Console.Clear();
-            return true;
-        }
-        else if (input.StartsWith("/nick "))
-        {
-            nickname = input.Substring(6).Trim();
-            Console.WriteLine($"Nickname changed to: {nickname}");
-            return true;
-        }
-        else if (input.StartsWith("/help"))
-        {
-            Console.WriteLine("\n/exit — leave the chat\n/nick <name> — change nickname\n/clear — clear screen\n/help — show commands\n");
-            return true;
-        }
+
         return false;
-    }
-
-    static void PrintDebug(string msg)
-    {
-        if (debugMode)
-        {
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine("[DEBUG] " + msg);
-            Console.ResetColor();
-        }
     }
 
     static string Time() => DateTime.Now.ToString("HH:mm");
