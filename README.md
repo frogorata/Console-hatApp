@@ -32,6 +32,9 @@ Available in chat:
 
 ## Build & Run
 
+Option 1: Download .exe from Releases
+Option 2: Build from source with dotnet run
+
 From the repository root:
 
 ```bash
