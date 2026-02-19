@@ -85,4 +85,3 @@ Local testing (same PC):
 ## License
 
 No license is currently specified.
-If you want others to freely reuse your code, consider adding an MIT license.
